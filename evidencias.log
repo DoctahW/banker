@@ -1,0 +1,17 @@
+Script iniciado em 2026-11-15 12:16:39-03:00 [COMMAND="bash --noprofile --rcfile tests/logrc -i" TERM="xterm-256color" TTY="/dev/pts/3" COLUMNS="177" LINES="39"]
+[euclides@pc-casa atvd5]$ cat -a[KA tests/vetores/exemplo/customer.txt [K
+7,5,3$
+3,2,2$
+9,0,2$
+2,2,2$
+4,3,3[euclides@pc-casa atvd5]$ cat -A tests/vetores/exemplo/customer.txt[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[21P./tests/mutantes.sh cat -A tests/vetores/exemplo/customer.txt[C[C[C[C[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[Kma[K[K[K[K[Kmak[K[K[K^C
+[euclides@pc-casa atvd5]$ make clean
+rm -rf objects banker
+[euclides@pc-casa atvd5]$ make
+mkdir -p objects
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/main.c -o objects/main.o
+gcc  -o banker objects/main.o 
+[euclides@pc-casa atvd5]$ exit
+exit
+
+Script concluído em 2026-11-15 12:17:23-03:00 [COMMAND_EXIT_CODE="0"]
