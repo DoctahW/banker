@@ -56,3 +56,25 @@ The customer 2 request 0 1 0 was denied because exceed its maximum allocation$
 [euclides@pc-casa atvd5]$ exit
 
 Script concluído em 2026-11-15 12:23:49-03:00 [COMMAND_EXIT_CODE="0"]
+Script iniciado em 2026-11-15 16:18:24-03:00 [COMMAND="bash --noprofile --rcfile tests/logrc -i" TERM="xterm-256color" TTY="/dev/pts/1" COLUMNS="177" LINES="39"]
+[euclides@pc-casa atvd5]$ ./make[K[K[K[K[K[Kmake clean
+rm -rf objects banker
+[euclides@pc-casa atvd5]$ make
+mkdir -p objects
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/erro.c -o objects/erro.o
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/main.c -o objects/main.o
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/parser.c -o objects/parser.o
+gcc  -o banker objects/erro.o objects/main.o objects/parser.o 
+[euclides@pc-casa atvd5]$ ./banker
+Uso: ./banker <instancias do recurso 0> [instancias do recurso 1 ...]
+Exemplo: ./banker 10 5 7
+[euclides@pc-casa atvd5]$ ./banker 10 5 7
+Erro: nao foi possivel abrir 'customer.txt': No such file or directory
+[euclides@pc-casa atvd5]$ ./banker 10 5 7[K 10 5 7[K[K[K[K[K[K-10 3 4
+Erro: argumento 1 ('-10'): valor nao pode ser negativo
+[euclides@pc-casa atvd5]$ ./bankd[Ker 99999999999 5 7
+Erro: argumento 1 ('99999999999'): valor grande demais
+[euclides@pc-casa atvd5]$ 
+[euclides@pc-casa atvd5]$ exit
+
+Script concluído em 2026-11-15 16:21:11-03:00 [COMMAND_EXIT_CODE="1"]
