@@ -78,3 +78,55 @@ Erro: argumento 1 ('99999999999'): valor grande demais
 [euclides@pc-casa atvd5]$ exit
 
 Script concluído em 2026-11-15 16:21:11-03:00 [COMMAND_EXIT_CODE="1"]
+Script iniciado em 2026-11-15 17:02:29-03:00 [COMMAND="bash --noprofile --rcfile tests/logrc -i" TERM="xterm-256color" TTY="/dev/pts/1" COLUMNS="177" LINES="39"]
+[euclides@pc-casa atvd5]$ make clean && sh tests/f1_check.sh
+rm -rf objects banker
+mkdir -p objects
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/erro.c -o objects/erro.o
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/main.c -o objects/main.o
+gcc -std=c11 -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L -MMD -MP -c source/parser.c -o objects/parser.o
+gcc  -o banker objects/erro.o objects/main.o objects/parser.o 
+== argumentos
+ok     #1 sem argumentos  ->  Uso: /home/euclides/Projetos/faculdade/infra-sw/atvd5/banker <instancias do recurso 0> [instancias do recurso 1 ...]
+ok     #2 nao numerico  ->  Erro: argumento 2 ('x'): valor nao e um inteiro valido
+ok     #2 negativo  ->  Erro: argumento 2 ('-1'): valor nao pode ser negativo
+ok     #2 overflow  ->  Erro: argumento 1 ('99999999999'): valor grande demais
+ok     #7 menos argumentos  ->  Erro: customer.txt: linha 1: quantidade de recursos diferente da passada na linha de comando (3 na linha, 2 na linha de comando)
+ok     #7 mais argumentos  ->  Erro: customer.txt: linha 1: quantidade de recursos diferente da passada na linha de comando (3 na linha, 4 na linha de comando)
+== customer.txt
+ok     #3 inexistente  ->  Erro: nao foi possivel abrir 'customer.txt': No such file or directory
+ok     #4 sem permissao  ->  Erro: nao foi possivel abrir 'customer.txt': Permission denied
+ok     #19 e um diretorio  ->  Erro: customer.txt: linha 1: falha de leitura do arquivo
+ok     #6 vazio  ->  Erro: customer.txt: o arquivo nao define nenhum cliente
+ok     #6 so linhas em branco  ->  Erro: customer.txt: o arquivo nao define nenhum cliente
+ok     #8 nao numerico  ->  Erro: customer.txt: linha 1, recurso 2 ('a'): valor nao e um inteiro valido
+ok     #8 negativo na linha 2  ->  Erro: customer.txt: linha 2, recurso 2 ('-1'): valor nao pode ser negativo
+ok     #8 7,,3  ->  Erro: customer.txt: linha 1, recurso 2: campo vazio (virgula sobrando ou faltando valor)
+ok     #8 ,7,3  ->  Erro: customer.txt: linha 1, recurso 1: campo vazio (virgula sobrando ou faltando valor)
+ok     #8 7,5,3,  ->  Erro: customer.txt: linha 1, recurso 4: campo vazio (virgula sobrando ou faltando valor)
+ok     #8 espaco no lugar de virgula  ->  Erro: customer.txt: linha 1, recurso 1 ('7 5 3'): valor nao e um inteiro valido
+== commands.txt
+ok     #5 inexistente  ->  Erro: nao foi possivel abrir 'commands.txt': No such file or directory
+ok     #9 recurso a menos  ->  Erro: commands.txt: linha 1: quantidade de recursos diferente da passada na linha de comando (2 no comando, 3 na linha de comando)
+ok     #9 recurso a mais  ->  Erro: commands.txt: linha 1: quantidade de recursos diferente da passada na linha de comando (4 ou mais no comando, 3 na linha de comando)
+ok     #9 RQ sozinho  ->  Erro: commands.txt: linha 1: quantidade de recursos diferente da passada na linha de comando (0 no comando, 3 na linha de comando)
+ok     #10 desconhecido  ->  Erro: commands.txt: linha 1 ('XX'): comando desconhecido (use RQ, RL ou *)
+ok     #10 minusculo  ->  Erro: commands.txt: linha 1 ('rq'): comando desconhecido (use RQ, RL ou *)
+ok     #11 cliente 5 (linha 2)  ->  Erro: commands.txt: linha 2, cliente 5: cliente inexistente (customer.txt tem 5, de 0 a 4)
+ok     #11 cliente -1  ->  Erro: commands.txt: linha 1, cliente ('-1'): valor nao pode ser negativo
+ok     #12 * com argumento  ->  Erro: commands.txt: linha 1: o comando '*' nao recebe argumentos
+ok     #13 nao numerico  ->  Erro: commands.txt: linha 1, recurso 2 ('x'): valor nao e um inteiro valido
+ok     #13 negativo  ->  Erro: commands.txt: linha 1, recurso 2 ('-2'): valor nao pode ser negativo
+== entradas validas
+ok     #17 entrada oficial
+ok     #18 quebra de linha no fim
+ok     #16 CRLF
+ok     linhas em branco e espacos
+ok     commands.txt vazio
+ok     instancias zero
+ok     #14 2000 recursos (linha longa)
+
+resultado: 35 ok, 0 falha
+[euclides@pc-casa atvd5]$ exit
+
+Script concluído em 2026-11-15 17:02:50-03:00 [COMMAND_EXIT_CODE="0"]
