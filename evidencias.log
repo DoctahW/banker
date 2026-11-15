@@ -15,3 +15,44 @@ gcc  -o banker objects/main.o
 exit
 
 Script concluído em 2026-11-15 12:17:23-03:00 [COMMAND_EXIT_CODE="0"]
+Script iniciado em 2026-11-15 12:23:31-03:00 [COMMAND="bash --noprofile --rcfile tests/logrc -i" TERM="xterm-256color" TTY="/dev/pts/3" COLUMNS="177" LINES="39"]
+[euclides@pc-casa atvd5]$ sha256sum tests/vetores/exemplo/* ~/Downloads/{customer,commands,result}.txt
+7dcdd33239c52547dba08e72aca2b1ffeaf973691c464eb80b67ad7d666a5b1c  tests/vetores/exemplo/argv.txt
+c24d9ef9a2387b7a7f7903122747d9f6a44eb39350802f2538e52a7acf765685  tests/vetores/exemplo/commands.txt
+aba101b1745d664d57565288f6287251889d099d18ae6deb6d349e8e7bc08465  tests/vetores/exemplo/customer.txt
+a8a6da37fc44011d184523b49970e24e760e663d16a997e20294cf164c09599f  tests/vetores/exemplo/result_esperado.txt
+aba101b1745d664d57565288f6287251889d099d18ae6deb6d349e8e7bc08465  /home/euclides/Downloads/customer.txt
+c24d9ef9a2387b7a7f7903122747d9f6a44eb39350802f2538e52a7acf765685  /home/euclides/Downloads/commands.txt
+a8a6da37fc44011d184523b49970e24e760e663d16a997e20294cf164c09599f  /home/euclides/Downloads/result.txt
+[euclides@pc-casa atvd5]$ cat -A tests/vetores/exemplo/commands.txt
+RQ 0 0 2 1$
+RQ 2 3 0 2$
+RQ 1 2 0 0$
+RQ 4 0 0 2$
+RL 0 0 1 1$
+RQ 3 2 1 1$
+*$
+RQ 4 4 0 0$
+RQ 1 1 0 2$
+RQ 0 0 2 0$
+RQ 2 0 1 0[euclides@pc-casa atvd5]$ cat -A tests/vetores/exemplo/result_esperado.txt
+Allocate to customer 0 the resources 0 2 1$
+Allocate to customer 2 the resources 3 0 2$
+Allocate to customer 1 the resources 2 0 0$
+Allocate to customer 4 the resources 0 0 2$
+Release from customer 0 the resources 0 1 1$
+Allocate to customer 3 the resources 2 1 1$
+MAXIMUM   |   ALLOCATION  |   NEED$
+7 5 3     |   0 1 0       |   7 4 3 $
+3 2 2     |   2 0 0       |   1 2 2 $
+9 0 2     |   3 0 2       |   6 0 0 $
+2 2 2     |   2 1 1       |   0 1 1 $
+4 3 3     |   0 0 2       |   4 3 1 $
+AVAILABLE 3 3 2 $
+The resources 3 3 2 are not enough to customer 4 request 4 0 0 $
+Allocate to customer 1 the resources 1 0 2$
+The customer 0 request 0 2 0 was denied because result in an unsafe state$
+The customer 2 request 0 1 0 was denied because exceed its maximum allocation$
+[euclides@pc-casa atvd5]$ exit
+
+Script concluído em 2026-11-15 12:23:49-03:00 [COMMAND_EXIT_CODE="0"]
