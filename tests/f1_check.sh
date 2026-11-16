@@ -1,5 +1,6 @@
 #!/bin/sh
-# tests/f1_check.sh -- checagem rapida da F1 (argv + customer.txt + commands.txt).
+# tests/f1_check.sh -- checagem rapida da F1 (argv + customer.txt + commands.txt)
+# e da F2/F3 (decisoes do banqueiro + result.txt byte a byte).
 # Adaptado do f1_check.sh/f5_check.sh da atvd3, com auxilio de IA (secao Uso de IA).
 # Os nomes de entrada sao fixos, entao cada caso roda num diretorio temporario
 # proprio: nada no projeto e sobrescrito.
@@ -52,6 +53,35 @@ esperar_ok() {
     fi
 }
 
+# F2/F3: exit 0, stdout/stderr vazios e result.txt igual (cmp) ao arquivo $2.
+# Na falha mostra o diff com cat -A ('$' = fim de linha, deixa o espaco visivel).
+esperar_resultado() {
+    desc=$1
+    esperado=$2
+    shift 2
+    saida=$(cd "$tmp/caso" && "$banker" "$@" 2>"$tmp/err"); rc=$?
+    if [ "$rc" -eq 0 ] && [ -z "$saida" ] && [ ! -s "$tmp/err" ] \
+       && cmp -s "$tmp/caso/result.txt" "$esperado"; then
+        echo "ok     $desc"; ok=$((ok + 1))
+    else
+        echo "FALHA  $desc  (rc=$rc, err='$(head -1 "$tmp/err")')"
+        if [ -e "$tmp/caso/result.txt" ]; then
+            cat -A "$esperado" > "$tmp/esperado_A"
+            cat -A "$tmp/caso/result.txt" > "$tmp/obtido_A"
+            echo "       diff esperado obtido:"
+            diff "$tmp/esperado_A" "$tmp/obtido_A" | sed 's/^/         /'
+        fi
+        falha=$((falha + 1))
+    fi
+}
+
+# grava o result.txt esperado em $tmp/esperado (printf interpreta \n)
+esperado() {
+    printf "$1" > "$tmp/esperado"
+}
+
+CAB='MAXIMUM   |   ALLOCATION  |   NEED\n'
+
 echo "== argumentos"
 preparar "$CLIENTES" "$COMANDOS"
 esperar_erro "#1 sem argumentos"
@@ -101,6 +131,40 @@ preparar "$CLIENTES" '';                  esperar_ok "commands.txt vazio"     10
 preparar "$CLIENTES" "$COMANDOS";         esperar_ok "instancias zero"        0 0 0
 preparar "$(seq 1 2000 | paste -sd, -)\n" "RQ 0 $(seq 1 2000 | tr '\n' ' ')\n"
 esperar_ok "#14 2000 recursos (linha longa)" $(seq 1 2000)
+
+echo "== F2/F3: banqueiro + result.txt"
+rm -rf "$tmp/caso"; mkdir "$tmp/caso"; cp "$exemplo/customer.txt" "$exemplo/commands.txt" "$tmp/caso"
+esperar_resultado "#17 exemplo oficial = result_esperado.txt" "$exemplo/result_esperado.txt" 10 5 7
+
+# need = maximum - allocation: o 2o pedido cabe no maximum (3 3), mas nao no need (1 1)
+preparar '3,3\n' 'RQ 0 2 2\nRQ 0 2 2\n*\n'
+esperado "Allocate to customer 0 the resources 2 2\nThe customer 0 request 2 2 was denied because exceed its maximum allocation\n${CAB}3 3     |   2 2       |   1 1 \nAVAILABLE 3 3 \n"
+esperar_resultado "F2 req <= maximum mas > need -> exceed" "$tmp/esperado" 5 5
+
+# unsafe tem que desfazer o pedido: o * mostra cliente 1 sem nada alocado
+preparar '3,3\n3,3\n' 'RQ 0 2 2\nRQ 1 2 2\n*\n'
+esperado "Allocate to customer 0 the resources 2 2\nThe customer 1 request 2 2 was denied because result in an unsafe state\n${CAB}3 3     |   2 2       |   1 1 \n3 3     |   0 0       |   3 3 \nAVAILABLE 2 2 \n"
+esperar_resultado "F2 unsafe + rollback" "$tmp/esperado" 4 4
+
+# seguro so com 2a passada (C1 termina antes de C0) e need == work exato
+preparar '2,2\n1,1\n' 'RQ 1 1 1\n*\n'
+esperado "Allocate to customer 1 the resources 1 1\n${CAB}2 2     |   0 0       |   2 2 \n1 1     |   1 1       |   0 0 \nAVAILABLE 1 1 \n"
+esperar_resultado "F2 2a passada e need == work" "$tmp/esperado" 2 2
+
+# RL maior que o alocado e negado (D.4); RL valido devolve need
+preparar '3,3\n' 'RQ 0 2 2\nRL 0 3 0\nRL 0 1 2\n*\n'
+esperado "Allocate to customer 0 the resources 2 2\nThe customer 0 release 3 0 was denied because exceed its allocation\nRelease from customer 0 the resources 1 2\n${CAB}3 3     |   1 0       |   2 3 \nAVAILABLE 4 5 \n"
+esperar_resultado "F2 release (D.4 + need devolvido)" "$tmp/esperado" 5 5
+
+# ordem maximo -> disponivel: 1o excede os dois (vale o maximo), 2o so o disponivel
+preparar '1,1\n' 'RQ 0 2 2\nRQ 0 1 1\n'
+esperado "The customer 0 request 2 2 was denied because exceed its maximum allocation\nThe resources 0 0 are not enough to customer 0 request 1 1 \n"
+esperar_resultado "F2 ordem maximo -> disponivel" "$tmp/esperado" 0 0
+
+# 1 recurso, numero de 2 digitos: separadores fixos (D.3)
+preparar '12\n' 'RQ 0 10\n*\n'
+esperado "Allocate to customer 0 the resources 10\n${CAB}12     |   10       |   2 \nAVAILABLE 10 \n"
+esperar_resultado "F3 1 recurso, 2 digitos" "$tmp/esperado" 20
 
 echo
 echo "resultado: $ok ok, $falha falha"
