@@ -8,6 +8,7 @@
 
 #define ARQ_CLIENTES "customer.txt"
 #define ARQ_COMANDOS "commands.txt"
+#define ARQ_RESULTADO "result.txt"
 #define DELIM " \t\r\n"
 
 // mesmo padrão de erro do ProcessFlow e Scheduler
@@ -420,6 +421,240 @@ static void libera_comandos(ListaComandos *lista) {
     lista->n = 0;
 }
 
+// banco
+
+typedef enum {
+    DEC_ALOCADO,
+    DEC_EXCEDE_MAXIMO,
+    DEC_SEM_RECURSO,
+    DEC_INSEGURO,
+    DEC_LIBERADO,
+    DEC_EXCEDE_ALOCADO
+} Decisao;
+
+typedef struct {
+    int n_cli, n_rec;
+    const int *maximum;
+    int *available;
+    int *allocation;
+    int *need;
+    int *work;
+    bool *finish;
+} Banco;
+
+static void banco_libera(Banco *banco) {
+    free(banco->available);
+    free(banco->allocation);
+    free(banco->need);
+    free(banco->work);
+    free(banco->finish);
+    *banco = (Banco){0};
+}
+
+static bool banco_cria(Banco *banco, int n_cli, int n_rec, const int *total, const int *maximo) {
+    // n_cli*n_rec ja foi alocado pelo le_clientes, entao o produto cabe em size_t
+    size_t celulas = (size_t)n_cli * (size_t)n_rec;
+
+    *banco = (Banco){
+        .n_cli = n_cli,
+        .n_rec = n_rec,
+        .maximum = maximo,
+        .available = malloc((size_t)n_rec * sizeof *banco->available),
+        .allocation = calloc(celulas, sizeof *banco->allocation),
+        .need = malloc(celulas * sizeof *banco->need),
+        .work = malloc((size_t)n_rec * sizeof *banco->work),
+        .finish = malloc((size_t)n_cli * sizeof *banco->finish),
+    };
+    if (banco->available == NULL || banco->allocation == NULL || banco->need == NULL
+        || banco->work == NULL || banco->finish == NULL) {
+        banco_libera(banco);
+        return false;
+    }
+
+    memcpy(banco->available, total, (size_t)n_rec * sizeof *banco->available);
+    memcpy(banco->need, maximo, celulas * sizeof *banco->need);
+    return true;
+}
+
+static bool cabe_em(const int *a, const int *b, int n) {
+    for (int j = 0; j < n; j++) {
+        if (a[j] > b[j]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Algoritmo de seguranca: simula os clientes terminando em alguma ordem. Varre
+// ate uma passada inteira sem progresso, porque quem libera recurso pode vir
+// depois, na ordem, de quem precisa dele (cmd 4 do exemplo).
+static bool banco_seguro(Banco *banco) {
+    int n_rec = banco->n_rec;
+    memcpy(banco->work, banco->available, (size_t)n_rec * sizeof *banco->work);
+    memset(banco->finish, 0, (size_t)banco->n_cli * sizeof *banco->finish);
+
+    int terminados = 0;
+    bool progresso = true;
+    while (progresso) {
+        progresso = false;
+        for (int i = 0; i < banco->n_cli; i++) {
+            const int *need_i = banco->need + (size_t)i * n_rec;
+            if (banco->finish[i] || !cabe_em(need_i, banco->work, n_rec)) {
+                continue;
+            }
+            const int *alloc_i = banco->allocation + (size_t)i * n_rec;
+            for (int j = 0; j < n_rec; j++) {
+                banco->work[j] += alloc_i[j];
+            }
+            banco->finish[i] = true;
+            terminados++;
+            progresso = true;
+        }
+    }
+    return terminados == banco->n_cli;
+}
+
+// Ordem das checagens: maximo -> disponivel -> seguranca.
+static Decisao banco_request(Banco *banco, int cliente, const int *req) {
+    int n_rec = banco->n_rec;
+    int *alloc_i = banco->allocation + (size_t)cliente * n_rec;
+    int *need_i = banco->need + (size_t)cliente * n_rec;
+
+    if (!cabe_em(req, need_i, n_rec)) {
+        return DEC_EXCEDE_MAXIMO;
+    }
+    if (!cabe_em(req, banco->available, n_rec)) {
+        return DEC_SEM_RECURSO;
+    }
+
+    for (int j = 0; j < n_rec; j++) {
+        banco->available[j] -= req[j];
+        alloc_i[j] += req[j];
+        need_i[j] -= req[j];
+    }
+    if (banco_seguro(banco)) {
+        return DEC_ALOCADO;
+    }
+
+    // desfaz: sem isso o pedido negado fica alocado
+    for (int j = 0; j < n_rec; j++) {
+        banco->available[j] += req[j];
+        alloc_i[j] -= req[j];
+        need_i[j] += req[j];
+    }
+    return DEC_INSEGURO;
+}
+
+static Decisao banco_release(Banco *banco, int cliente, const int *rel) {
+    int n_rec = banco->n_rec;
+    int *alloc_i = banco->allocation + (size_t)cliente * n_rec;
+    int *need_i = banco->need + (size_t)cliente * n_rec;
+
+    if (!cabe_em(rel, alloc_i, n_rec)) {
+        return DEC_EXCEDE_ALOCADO;
+    }
+    for (int j = 0; j < n_rec; j++) {
+        banco->available[j] += rel[j];
+        alloc_i[j] -= rel[j];
+        need_i[j] += rel[j];
+    }
+    return DEC_LIBERADO;
+}
+
+// saida: formato copiado do result.txt oficial
+#define CAB_ESTADO     "MAXIMUM   |   ALLOCATION  |   NEED\n"
+#define SEP_MAX_ALLOC  "    |   "
+#define SEP_ALLOC_NEED "      |   "
+
+// estilo A: " 0 2 1", sem espaco no fim (Allocate/Release)
+static void escreve_vet_a(FILE *arquivo, const int *vetor, int n) {
+    for (int j = 0; j < n; j++) {
+        fprintf(arquivo, " %d", vetor[j]);
+    }
+}
+
+// estilo D: "0 2 1 ", com espaco no fim (denied, not enough, tabela, AVAILABLE)
+static void escreve_vet_d(FILE *arquivo, const int *vetor, int n) {
+    for (int j = 0; j < n; j++) {
+        fprintf(arquivo, "%d ", vetor[j]);
+    }
+}
+
+static void escreve_decisao(FILE *arquivo, const Banco *banco, int cliente,
+                            const int *valores, Decisao decisao) {
+    int n_rec = banco->n_rec;
+    switch (decisao) {
+        case DEC_ALOCADO:
+            fprintf(arquivo, "Allocate to customer %d the resources", cliente);
+            escreve_vet_a(arquivo, valores, n_rec);
+            break;
+        case DEC_LIBERADO:
+            fprintf(arquivo, "Release from customer %d the resources", cliente);
+            escreve_vet_a(arquivo, valores, n_rec);
+            break;
+        case DEC_SEM_RECURSO:
+            fputs("The resources ", arquivo);
+            escreve_vet_d(arquivo, banco->available, n_rec);
+            fprintf(arquivo, "are not enough to customer %d request ", cliente);
+            escreve_vet_d(arquivo, valores, n_rec);
+            break;
+        case DEC_INSEGURO:
+            fprintf(arquivo, "The customer %d request ", cliente);
+            escreve_vet_d(arquivo, valores, n_rec);
+            fputs("was denied because result in an unsafe state", arquivo);
+            break;
+        case DEC_EXCEDE_MAXIMO:
+            fprintf(arquivo, "The customer %d request ", cliente);
+            escreve_vet_d(arquivo, valores, n_rec);
+            fputs("was denied because exceed its maximum allocation", arquivo);
+            break;
+        case DEC_EXCEDE_ALOCADO:
+            fprintf(arquivo, "The customer %d release ", cliente);
+            escreve_vet_d(arquivo, valores, n_rec);
+            fputs("was denied because exceed its allocation", arquivo);
+            break;
+    }
+    fputc('\n', arquivo);
+}
+
+static void escreve_estado(FILE *arquivo, const Banco *banco) {
+    int n_rec = banco->n_rec;
+    fputs(CAB_ESTADO, arquivo);
+    for (int i = 0; i < banco->n_cli; i++) {
+        size_t linha = (size_t)i * (size_t)n_rec;
+        escreve_vet_d(arquivo, banco->maximum + linha, n_rec);
+        fputs(SEP_MAX_ALLOC, arquivo);
+        escreve_vet_d(arquivo, banco->allocation + linha, n_rec);
+        fputs(SEP_ALLOC_NEED, arquivo);
+        escreve_vet_d(arquivo, banco->need + linha, n_rec);
+        fputc('\n', arquivo);
+    }
+    fputs("AVAILABLE ", arquivo);
+    escreve_vet_d(arquivo, banco->available, n_rec);
+    fputc('\n', arquivo);
+}
+
+// executa os comandos em ordem, uma linha (ou a tabela do '*') por comando
+static void executa_comandos(Banco *banco, const ListaComandos *comandos, FILE *arquivo) {
+    for (int k = 0; k < comandos->n; k++) {
+        const Comando *comando = &comandos->cmd[k];
+        const int *valores = comandos->vals + (size_t)k * (size_t)banco->n_rec;
+        switch (comando->tipo) {
+            case CMD_RQ:
+                escreve_decisao(arquivo, banco, comando->cliente, valores,
+                                banco_request(banco, comando->cliente, valores));
+                break;
+            case CMD_RL:
+                escreve_decisao(arquivo, banco, comando->cliente, valores,
+                                banco_release(banco, comando->cliente, valores));
+                break;
+            case CMD_ESTRELA:
+                escreve_estado(arquivo, banco);
+                break;
+        }
+    }
+}
+
 // main
 
 static bool carrega_recursos(int argc, char **argv, int **total, int *n_rec) {
@@ -466,6 +701,26 @@ static bool carrega_comandos(int n_rec, int n_cli, ListaComandos *comandos) {
     return true;
 }
 
+static bool escreve_resultado(Banco *banco, const ListaComandos *comandos) {
+    FILE *arquivo = fopen(ARQ_RESULTADO, "w");
+    if (arquivo == NULL) {
+        fprintf(stderr, "Erro: nao foi possivel criar '%s': %s\n", ARQ_RESULTADO, strerror(errno));
+        return false;
+    }
+
+    executa_comandos(banco, comandos, arquivo);
+
+    bool falhou = ferror(arquivo);
+    if (fclose(arquivo) != 0) {
+        falhou = true;
+    }
+    if (falhou) {
+        fprintf(stderr, "Erro: falha ao escrever '%s'\n", ARQ_RESULTADO);
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Uso: %s <instancias do recurso 0> [instancias do recurso 1 ...]\n"
@@ -484,6 +739,14 @@ int main(int argc, char *argv[]) {
            && carrega_clientes(n_rec, &maximo, &n_cli)
            && carrega_comandos(n_rec, n_cli, &comandos);
 
+    Banco banco = {0};
+    if (ok && !banco_cria(&banco, n_cli, n_rec, total, maximo)) {
+        fprintf(stderr, "Erro: %s\n", erro_msg(ERR_MEMORIA));
+        ok = false;
+    }
+    ok = ok && escreve_resultado(&banco, &comandos);
+
+    banco_libera(&banco);
     libera_comandos(&comandos);
     free(maximo);
     free(total);
